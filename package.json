@@ -1,0 +1,27 @@
+{
+  "name": "org-script-to-notion",
+  "version": "1.0.0",
+  "description": "import script from jw.org certain category of video to notion page",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "@opendocsg/pdf2md": "^0.2.3",
+    "axios": "^1.7.7",
+    "cheerio": "1.0.0-rc.12",
+    "domutils": "^3.2.2",
+    "dotenv": "^16.6.1",
+    "fs": "^0.0.1-security",
+    "htmlparser2": "^10.1.0",
+    "iconv-lite": "^0.7.2",
+    "install": "^0.13.0",
+    "node-fetch": "^3.3.2",
+    "npm": "^11.10.0",
+    "path": "^0.12.7"
+  },
+  "type": "module"
+}

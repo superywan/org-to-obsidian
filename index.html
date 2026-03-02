@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JW.ORG → Obsidian 임포터</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 24px 80px;
+    }
+
+    h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 0.85rem; color: #64748b; margin-bottom: 36px; }
+
+    .sections { width: 100%; max-width: 680px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── 섹션 카드 ── */
+    .section-card {
+      background: #1a1f2e;
+      border: 2px solid #2d3548;
+      border-radius: 14px;
+      transition: border-color 0.15s;
+    }
+    .section-card.active { border-color: #6366f1; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 22px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .section-header:hover { background: rgba(99,102,241,0.05); border-radius: 12px; }
+
+    .section-toggle {
+      width: 44px; height: 24px;
+      background: #2d3548;
+      border-radius: 12px;
+      position: relative;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .section-toggle::after {
+      content: "";
+      position: absolute;
+      width: 18px; height: 18px;
+      background: #fff;
+      border-radius: 50%;
+      top: 3px; left: 3px;
+      transition: transform 0.2s;
+    }
+    .section-card.active .section-toggle { background: #6366f1; }
+    .section-card.active .section-toggle::after { transform: translateX(20px); }
+
+    .section-info { flex: 1; }
+    .section-title { font-size: 1rem; font-weight: 600; }
+    .section-desc { font-size: 0.78rem; color: #64748b; margin-top: 2px; }
+
+    /* ── 일괄 선택 버튼 ── */
+    .bulk-btns { display: flex; gap: 10px; margin-bottom: 12px; }
+    .bulk-btn {
+      flex: 1;
+      background: #1a1f2e;
+      color: #cbd5e1;
+      border: 1px solid #2d3548;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .bulk-btn:hover { background: #242a3d; border-color: #6366f1; }
+    .bulk-btn.on { border-color: #6366f1; background: rgba(99,102,241,0.12); color: #a5b4fc; }
+
+    /* ── 시작 버튼 ── */
+    .footer { margin-top: 28px; width: 100%; max-width: 680px; }
+    #startBtn {
+      width: 100%;
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    #startBtn:hover:not(:disabled) { background: #4f46e5; }
+    #startBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .status { font-size: 0.85rem; color: #64748b; margin: 14px 0 10px; min-height: 20px; }
+    .spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid #64748b;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 6px; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── 탭 바 ── */
+    .output-area { width: 100%; max-width: 680px; display: none; }
+    .output-area.visible { display: block; }
+
+    .tab-bar {
+      display: flex;
+      gap: 2px;
+      margin-bottom: -1px;
+      position: relative;
+      z-index: 1;
+    }
+    .tab-btn {
+      background: #151822;
+      color: #64748b;
+      border: 1px solid #2d3548;
+      border-bottom: 1px solid #2d3548;
+      border-radius: 10px 10px 0 0;
+      padding: 10px 20px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: #0d0f14;
+      color: #e2e8f0;
+      border-bottom-color: #0d0f14;
+    }
+    .tab-btn .badge {
+      display: inline-block;
+      background: #6366f1;
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 10px;
+      margin-left: 6px;
+      min-width: 18px;
+      text-align: center;
+    }
+    .tab-btn .badge.zero { background: #2d3548; color: #64748b; }
+
+    /* ── 로그 박스 ── */
+    .panel-box {
+      background: #0d0f14;
+      border: 1px solid #2d3548;
+      border-radius: 0 12px 12px 12px;
+      padding: 16px 20px;
+      max-height: 420px;
+      overflow-y: auto;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.78rem;
+      line-height: 1.7;
+    }
+    .panel-box.hidden { display: none; }
+
+    .log-line { white-space: pre-wrap; word-break: break-all; }
+    .log-line.error { color: #f87171; }
+    .log-line.warn  { color: #fb923c; }
+    .log-line.done  { color: #34d399; font-weight: 700; }
+    .log-line.log   { color: #94a3b8; }
+
+    /* ── 새 파일 목록 ── */
+    .file-item {
+      padding: 5px 0;
+      color: #94a3b8;
+      font-size: 0.78rem;
+      border-bottom: 1px solid #1a1f2e;
+      display: flex;
+      gap: 8px;
+    }
+    .file-item:last-child { border-bottom: none; }
+    .file-item .file-icon { color: #34d399; flex-shrink: 0; }
+    .file-item .file-path { word-break: break-all; }
+    .file-empty { color: #475569; font-size: 0.82rem; padding: 20px 0; text-align: center; }
+  </style>
+</head>
+<body>
+
+<h1>JW.ORG → Obsidian 임포터</h1>
+<p class="subtitle">가져올 항목을 선택하고 임포트 시작 버튼을 누르세요. 이미 있는 파일은 자동으로 건너뜁니다.</p>
+
+<div class="sections">
+  <div class="section-card" id="card-videos">
+    <div class="section-header" onclick="toggle('videos')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">🎬 영상 자막</div>
+        <div class="section-desc">JW.ORG 온디맨드 영상 자막 텍스트</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-bible">
+    <div class="section-header" onclick="toggle('bible')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📕 성경</div>
+        <div class="section-desc">신세계역 성경(연구용) 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-insight">
+    <div class="section-header" onclick="toggle('insight')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">🔍 통찰</div>
+        <div class="section-desc">성경 통찰 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-watchtower">
+    <div class="section-header" onclick="toggle('watchtower')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📰 파수대</div>
+        <div class="section-desc">파수대 잡지 전체 연도</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-awake">
+    <div class="section-header" onclick="toggle('awake')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📗 깨어라!</div>
+        <div class="section-desc">깨어라! 잡지 전체 연도</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-books">
+    <div class="section-header" onclick="toggle('books')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📖 서적</div>
+        <div class="section-desc">WOL 서적 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-meeting">
+    <div class="section-header" onclick="toggle('meeting')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">🏛️ 집회 교재</div>
+        <div class="section-desc">집회 교재 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-kingdomService">
+    <div class="section-header" onclick="toggle('kingdomService')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📋 왕국 봉사</div>
+        <div class="section-desc">왕국 봉사 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-programs">
+    <div class="section-header" onclick="toggle('programs')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📅 프로그램</div>
+        <div class="section-desc">대회/행사 프로그램 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-brochures">
+    <div class="section-header" onclick="toggle('brochures')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📄 팜플렛/소책자</div>
+        <div class="section-desc">팜플렛·소책자 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-tracts">
+    <div class="section-header" onclick="toggle('tracts')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📃 전도지</div>
+        <div class="section-desc">전도지 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-webSeries">
+    <div class="section-header" onclick="toggle('webSeries')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">🌐 연재 기사</div>
+        <div class="section-desc">연재 기사 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-guidelines">
+    <div class="section-header" onclick="toggle('guidelines')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📌 지침</div>
+        <div class="section-desc">지침/가이드라인 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-glossary">
+    <div class="section-header" onclick="toggle('glossary')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">📚 용어 설명</div>
+        <div class="section-desc">용어 설명 전체</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card" id="card-index">
+    <div class="section-header" onclick="toggle('index')">
+      <div class="section-toggle"></div>
+      <div class="section-info">
+        <div class="section-title">🗂️ 색인</div>
+        <div class="section-desc">출판물 색인 전체</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="bulk-btns">
+    <button class="bulk-btn" id="bulkVideo" onclick="toggleBulk('video')">🎬 영상</button>
+    <button class="bulk-btn" id="bulkRest" onclick="toggleBulk('rest')">📚 나머지 전체</button>
+    <button class="bulk-btn" id="bulkAll" onclick="toggleBulk('all')">✅ 모두 선택</button>
+  </div>
+  <button id="startBtn" onclick="startImport()" disabled>임포트 시작</button>
+  <div class="status" id="status"></div>
+</div>
+
+<div class="output-area" id="outputArea">
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tabLog" onclick="switchTab('log')">로그</button>
+    <button class="tab-btn" id="tabFiles" onclick="switchTab('files')">새 파일 <span class="badge zero" id="newFileCount">0</span></button>
+  </div>
+  <div class="panel-box" id="logBox"></div>
+  <div class="panel-box hidden" id="fileBox">
+    <div class="file-empty" id="fileEmpty">아직 새로 추가된 파일이 없습니다.</div>
+  </div>
+</div>
+
+<script>
+  // ── 상태 ──────────────────────────────────────────────
+  const categories = [
+    'videos', 'bible', 'insight', 'watchtower', 'awake', 'books',
+    'meeting', 'kingdomService', 'programs', 'brochures', 'tracts',
+    'webSeries', 'guidelines', 'glossary', 'index',
+  ];
+  const active = {};
+  categories.forEach(k => active[k] = false);
+
+  let newFiles = [];
+  let evtSource = null;
+
+  // ── 토글 ──────────────────────────────────────────────
+  function toggle(type) {
+    active[type] = !active[type];
+    document.getElementById('card-' + type).classList.toggle('active', active[type]);
+    updateUI();
+  }
+
+  function toggleBulk(group) {
+    let keys;
+    if (group === 'video') keys = ['videos'];
+    else if (group === 'rest') keys = categories.filter(k => k !== 'videos');
+    else keys = [...categories];
+
+    const anyOff = keys.some(k => !active[k]);
+    keys.forEach(k => {
+      active[k] = anyOff;
+      document.getElementById('card-' + k).classList.toggle('active', anyOff);
+    });
+    updateUI();
+  }
+
+  function updateUI() {
+    // 시작 버튼
+    document.getElementById('startBtn').disabled = !categories.some(k => active[k]);
+    // 일괄 버튼 상태
+    document.getElementById('bulkVideo').classList.toggle('on', active.videos);
+    const restKeys = categories.filter(k => k !== 'videos');
+    document.getElementById('bulkRest').classList.toggle('on', restKeys.every(k => active[k]));
+    document.getElementById('bulkAll').classList.toggle('on', categories.every(k => active[k]));
+  }
+
+  // ── 탭 전환 ───────────────────────────────────────────
+  function switchTab(tab) {
+    document.getElementById('tabLog').classList.toggle('active', tab === 'log');
+    document.getElementById('tabFiles').classList.toggle('active', tab === 'files');
+    document.getElementById('logBox').classList.toggle('hidden', tab !== 'log');
+    document.getElementById('fileBox').classList.toggle('hidden', tab !== 'files');
+  }
+
+  // ── 로그 ──────────────────────────────────────────────
+  function appendLog(type, message) {
+    const box = document.getElementById('logBox');
+    const line = document.createElement('div');
+    line.className = 'log-line ' + type;
+    line.textContent = message;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function addNewFile(filePath) {
+    newFiles.push(filePath);
+    // 배지 업데이트
+    const badge = document.getElementById('newFileCount');
+    badge.textContent = newFiles.length;
+    badge.classList.remove('zero');
+    // 목록에 추가
+    const box = document.getElementById('fileBox');
+    document.getElementById('fileEmpty')?.remove();
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    // Vault 기준 경로만 표시
+    const short = filePath.includes('/library/') ? filePath.split('/library/')[1] : filePath.split('/').slice(-3).join('/');
+    item.innerHTML = `<span class="file-icon">+</span><span class="file-path">${short}</span>`;
+    box.appendChild(item);
+  }
+
+  // ── 임포트 시작 ───────────────────────────────────────
+  function startImport() {
+    newFiles = [];
+    const logBox = document.getElementById('logBox');
+    const fileBox = document.getElementById('fileBox');
+    const status = document.getElementById('status');
+    logBox.innerHTML = '';
+    fileBox.innerHTML = '<div class="file-empty" id="fileEmpty">아직 새로 추가된 파일이 없습니다.</div>';
+    document.getElementById('newFileCount').textContent = '0';
+    document.getElementById('newFileCount').classList.add('zero');
+
+    document.getElementById('outputArea').classList.add('visible');
+    switchTab('log');
+    status.innerHTML = '<span class="spinner"></span>임포트 진행 중...';
+    document.getElementById('startBtn').disabled = true;
+    document.querySelectorAll('.section-header').forEach(h => h.style.pointerEvents = 'none');
+    document.querySelectorAll('.bulk-btn').forEach(b => b.style.pointerEvents = 'none');
+
+    if (evtSource) evtSource.close();
+    evtSource = new EventSource('/events');
+    evtSource.onmessage = (e) => {
+      const { type, message } = JSON.parse(e.data);
+      // [NEW_FILE] 패턴 감지
+      if (type === 'log' && message.startsWith('[NEW_FILE] ')) {
+        addNewFile(message.slice('[NEW_FILE] '.length));
+        return; // 로그에는 표시하지 않음
+      }
+      appendLog(type, message);
+      if (type === 'done') {
+        const fileCount = newFiles.length;
+        status.innerHTML = '✅ ' + message + (fileCount > 0 ? ` (새 파일 ${fileCount}개)` : '');
+        evtSource.close();
+        document.getElementById('startBtn').disabled = false;
+        document.querySelectorAll('.section-header').forEach(h => h.style.pointerEvents = '');
+        document.querySelectorAll('.bulk-btn').forEach(b => b.style.pointerEvents = '');
+      }
+    };
+
+    fetch('/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        videos: active.videos,
+        insight: active.insight,
+        watchtower: active.watchtower,
+        awake: active.awake,
+        books: active.books,
+        meeting: active.meeting,
+        kingdomService: active.kingdomService,
+        programs: active.programs,
+        brochures: active.brochures,
+        tracts: active.tracts,
+        webSeries: active.webSeries,
+        guidelines: active.guidelines,
+        glossary: active.glossary,
+        index: active.index,
+        bible: active.bible,
+      }),
+    }).catch(err => appendLog('error', '서버 연결 실패: ' + err.message));
+  }
+</script>
+</body>
+</html>

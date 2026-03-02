@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:wol.jw.org)",
+      "Bash(ls:*)",
+      "Bash(node -e:*)",
+      "Bash(grep:*)",
+      "Bash(node --check:*)",
+      "Bash(for f in importers/*.js)",
+      "Bash(do node --check \"$f\")",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(curl:*)",
+      "Bash(pgrep:*)",
+      "Read(//Users/waneddyyi/Documents/org-script-to-obsidian /**)"
+    ],
+    "additionalDirectories": [
+      "/Users/iseojin/Documents/org-script-to-obsidian/importers"
+    ]
+  }
+}

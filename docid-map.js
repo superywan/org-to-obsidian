@@ -320,6 +320,21 @@ const parseBibleRef = (displayText) => {
   return { bookNum, chapter, verse };
 };
 
+// ── href에서 단락 블록 ID fragment 추출 ──────
+// #p9 → "^p9", #h=12:0-14:27 → "^p12", #h=47-53:0 → "^p47"
+const parseFragment = (href) => {
+  const hashIdx = href.indexOf("#");
+  if (hashIdx < 0) return "";
+  const frag = href.substring(hashIdx + 1);
+  // #pN — 단락 직접 참조
+  const pDirect = frag.match(/^p(\d+)$/);
+  if (pDirect) return `#^p${pDirect[1]}`;
+  // #h=N:... — 범위 참조의 시작 pid
+  const hRange = frag.match(/^h=(\d+)/);
+  if (hRange) return `#^p${hRange[1]}`;
+  return "";
+};
+
 // ── WOL href → Obsidian wikilink 변환 (동기) ─
 export const resolveLink = (map, href, displayText, lastBcCtx = null) => {
   // lastBcCtx: { bookNum, chapter } — 이전 bc 링크의 책+장 컨텍스트
@@ -327,7 +342,10 @@ export const resolveLink = (map, href, displayText, lastBcCtx = null) => {
   const docIdMatch = href.match(/\/wol\/d\/r8\/lp-ko\/(\d+)/);
   if (docIdMatch) {
     const vaultPath = map[docIdMatch[1]];
-    if (vaultPath) return `[[${vaultPath}|${displayText}]]`;
+    if (vaultPath) {
+      const fragment = parseFragment(href);
+      return `[[${vaultPath}${fragment}|${displayText}]]`;
+    }
   }
 
   // 2. 성경 장 패턴: /wol/b/r8/lp-ko/nwtsty/{bookNum}/{chapter}
@@ -514,15 +532,23 @@ export const resolveLink = (map, href, displayText, lastBcCtx = null) => {
   const dsimMatch = href.match(/\/wol\/dsim\/r8\/lp-ko\/(\d+)/);
   if (dsimMatch) {
     const vaultPath = map[dsimMatch[1]];
-    if (vaultPath) return `[[${vaultPath}|${displayText}]]`;
+    if (vaultPath) {
+      const fragment = parseFragment(href);
+      return `[[${vaultPath}${fragment}|${displayText}]]`;
+    }
   }
 
   // 5. pc/tc 리다이렉트 캐시 조회
   if (href.includes("/wol/pc/") || href.includes("/wol/tc/")) {
     const cached = _redirectCache[href];
     if (cached) {
-      const vaultPath = map[cached];
-      if (vaultPath) return `[[${vaultPath}|${displayText}]]`;
+      // 캐시값이 "docId#fragment" 형태일 수 있음
+      const [cachedDocId, cachedFrag] = cached.split("#");
+      const vaultPath = map[cachedDocId];
+      if (vaultPath) {
+        const fragment = cachedFrag ? `#^p${cachedFrag}` : "";
+        return `[[${vaultPath}${fragment}|${displayText}]]`;
+      }
     }
   }
 
@@ -557,7 +583,11 @@ export const preResolveLinks = async (html) => {
       if (redirectUrl) {
         const docIdMatch = redirectUrl.match(/\/wol\/d\/r8\/lp-ko\/(\d+)/);
         if (docIdMatch) {
-          _redirectCache[href] = docIdMatch[1];
+          // fragment 보존: #h=12:0-14:27 → 시작 pid "12"
+          const fragMatch = redirectUrl.match(/#h=(\d+)/);
+          _redirectCache[href] = fragMatch
+            ? `${docIdMatch[1]}#${fragMatch[1]}`
+            : docIdMatch[1];
         }
       }
       resolved++;
@@ -665,6 +695,14 @@ export const parseArticleContent = async (html, docidMap = {}) => {
 
   const lines = [];
 
+  // 요소의 id 속성에서 블록 ID 접미사 생성 ("p12" → " ^p12")
+  const blockIdSuffix = (el) => {
+    const id = $(el).attr("id");
+    if (!id) return "";
+    const m = id.match(/^p(\d+)$/);
+    return m ? ` ^p${m[1]}` : "";
+  };
+
   const extractText = (container) => {
     container.children().each((_, el) => {
       const tag = el.tagName?.toLowerCase();
@@ -673,13 +711,13 @@ export const parseArticleContent = async (html, docidMap = {}) => {
       if (!text) return;
 
       if (tag === "h1") {
-        lines.push(`# ${text}`);
+        lines.push(`# ${text}${blockIdSuffix(el)}`);
       } else if (tag === "h2") {
-        lines.push(`## ${text}`);
+        lines.push(`## ${text}${blockIdSuffix(el)}`);
       } else if (tag === "h3") {
-        lines.push(`### ${text}`);
+        lines.push(`### ${text}${blockIdSuffix(el)}`);
       } else if (tag === "p") {
-        lines.push(text);
+        lines.push(`${text}${blockIdSuffix(el)}`);
       } else if (tag === "ul" || tag === "ol") {
         $(el)
           .find("li")

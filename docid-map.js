@@ -173,6 +173,7 @@ const SINGLE_CHAPTER_BOOKS = new Set([31, 57, 63, 64, 65]); // 오바댜, 빌레
 // ── 모듈 레벨 캐시 ──────────────────────────
 let _bookNameMap = {};
 let _redirectCache = {};
+let _scriptureRegex = null;
 
 // ── docId 매핑 로드/저장 ─────────────────────
 export const loadMap = () => {
@@ -180,6 +181,7 @@ export const loadMap = () => {
     const map = JSON.parse(fs.readFileSync(MAP_FILE, "utf-8"));
     _bookNameMap = loadBookNameMap();
     _redirectCache = loadRedirectCache();
+    _scriptureRegex = null; // 맵 변경 시 정규식 캐시 무효화
     return map;
   } catch {
     return {};
@@ -277,6 +279,106 @@ export const parseCrossRefText = (text, docidMap) => {
   });
 
   return results.join("; ");
+};
+
+// ── 평문 텍스트에서 성구 참조 감지 및 태그 추가 ─
+const _getScriptureRegex = () => {
+  if (_scriptureRegex) return _scriptureRegex;
+  const allNames = new Set([
+    ...Object.keys(BOOK_ABBREV_MAP),
+    ...Object.keys(_bookNameMap),
+  ]);
+  // 길이 역순 정렬 — "요한 계시록"이 "요한"보다 먼저 매칭
+  const sorted = [...allNames].sort((a, b) => b.length - a.length);
+  const escaped = sorted.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const bookPattern = escaped.join("|");
+  _scriptureRegex = new RegExp(
+    `(?<![가-힣])(${bookPattern})\\s+` +
+    `(\\d+:[\\d,\\s\\-–:]*\\d(?:\\s*절)?` +        // 장:절 (14:1, 6:25-33, 5:28, 29, 9:1–10:15)
+    `|\\d+장(?:\\s*[\\d,\\s\\-–]*\\d\\s*절)?` +     // N장 [N절] (11장 24절, 24장)
+    `|\\d+편(?:\\s*[\\d,\\s\\-–]*\\d\\s*절)?)`,      // N편 [N절] (91편 11절) — 시편
+    "g"
+  );
+  return _scriptureRegex;
+};
+
+export const addScriptureTags = (text, docidMap = {}) => {
+  const regex = _getScriptureRegex();
+  regex.lastIndex = 0;
+
+  return text.replace(regex, (fullMatch, bookName, refPart) => {
+    const bookNum = _lookupBook(bookName);
+    if (!bookNum) return fullMatch;
+
+    let chapter = null;
+    let firstVerse = null;
+    let tagStr = "";
+
+    // ── Pattern 1: 장:절 (colon) ──
+    const colonMatch = refPart.match(/^(\d+):/);
+    if (colonMatch) {
+      chapter = parseInt(colonMatch[1], 10);
+      const crossCh = extractCrossChapterRange(refPart);
+      if (crossCh) {
+        tagStr = makeCrossChapterTags(bookNum, crossCh);
+        firstVerse = parseInt(refPart.match(/\d+:(\d+)/)?.[1], 10);
+      } else {
+        const verses = extractAllVerses(refPart);
+        if (verses && verses.length > 0) {
+          tagStr = makeBibleVerseTags(bookNum, chapter, verses);
+          firstVerse = verses[0];
+        } else {
+          tagStr = makeBibleTag(bookNum, chapter, null);
+        }
+      }
+    }
+
+    // ── Pattern 2: N장 [N절] ──
+    if (!chapter) {
+      const jangMatch = refPart.match(/^(\d+)장/);
+      if (jangMatch) {
+        chapter = parseInt(jangMatch[1], 10);
+        const verseMatch = refPart.match(/장\s*([\d,\s\-–]+)\s*절/);
+        if (verseMatch) {
+          const verses = parseVerseSpec(verseMatch[1]);
+          if (verses && verses.length > 0) {
+            tagStr = makeBibleVerseTags(bookNum, chapter, verses);
+            firstVerse = verses[0];
+          }
+        }
+        if (!tagStr) tagStr = makeBibleTag(bookNum, chapter, null);
+      }
+    }
+
+    // ── Pattern 3: N편 [N절] (시편) ──
+    if (!chapter) {
+      const pyeonMatch = refPart.match(/^(\d+)편/);
+      if (pyeonMatch) {
+        chapter = parseInt(pyeonMatch[1], 10);
+        const verseMatch = refPart.match(/편\s*([\d,\s\-–]+)\s*절/);
+        if (verseMatch) {
+          const verses = parseVerseSpec(verseMatch[1]);
+          if (verses && verses.length > 0) {
+            tagStr = makeBibleVerseTags(bookNum, chapter, verses);
+            firstVerse = verses[0];
+          }
+        }
+        if (!tagStr) tagStr = makeBibleTag(bookNum, chapter, null);
+      }
+    }
+
+    if (!chapter) return fullMatch;
+
+    // wikilink + 인라인 태그 생성
+    const bibleKey = `b:${bookNum}:${chapter}`;
+    const vaultPath = docidMap[bibleKey];
+    if (vaultPath) {
+      const anchor = firstVerse ? `#^v${firstVerse}` : "";
+      return `[[${vaultPath}${anchor}|${fullMatch}]]${tagStr}`;
+    }
+    // vault 경로 없으면 태그만
+    return tagStr.trim() ? `${fullMatch}${tagStr}` : fullMatch;
+  });
 };
 
 // ── 책 이름 조회 헬퍼 ──────────────────────

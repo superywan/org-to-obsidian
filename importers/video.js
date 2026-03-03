@@ -7,6 +7,7 @@ import {
   getVideoSubtitleAPI,
   getVideoListAPI,
 } from "../requests.js";
+import { addScriptureTags, loadMap } from "../docid-map.js";
 
 const getVideoCategories = async (config) => {
   const categories = await getVideoCategoriesAPI(config);
@@ -22,7 +23,8 @@ const importToObsidian = async (
   config,
   listOfExistingFiles,
   category,
-  subCategory
+  subCategory,
+  docidMap
 ) => {
   const videoList = await getVideoListAPI(subCategory.key, config);
   // console.log(
@@ -68,7 +70,9 @@ const importToObsidian = async (
         //   .map((m) => m[1].trim())
         //   .join(" ");
 
-        fs.writeFile(currentPathWithTitle, cleanText, { flag: "wx" }, (err) => {
+        const taggedText = addScriptureTags(cleanText, docidMap);
+
+        fs.writeFile(currentPathWithTitle, taggedText, { flag: "wx" }, (err) => {
           if (err) return;
           console.log(`[NEW_FILE] ${currentPathWithTitle}`);
         });
@@ -96,12 +100,13 @@ export const getVideoCategoryTree = async (config) => {
 
 // selectedSubcategoryKeys: string[] | null (null = 전체)
 export const importOrgVideos = async (config, listOfExistingFiles, selectedSubcategoryKeys = null) => {
+  const docidMap = loadMap();
   const categories = await getVideoCategories(config);
   for (const category of categories) {
     const subCategories = await getVideoSubCategories(config, category.key);
     for (const subCategory of subCategories) {
       if (selectedSubcategoryKeys !== null && !selectedSubcategoryKeys.includes(subCategory.key)) continue;
-      await importToObsidian(config, listOfExistingFiles, category, subCategory);
+      await importToObsidian(config, listOfExistingFiles, category, subCategory, docidMap);
     }
   }
 };

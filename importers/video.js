@@ -72,7 +72,14 @@ const importToObsidian = async (
 
         const taggedText = addScriptureTags(cleanText, docidMap);
 
-        fs.writeFile(currentPathWithTitle, taggedText, { flag: "wx" }, (err) => {
+        // 영상 원문 링크 추가
+        const videoKey = videoList[i].languageAgnosticNaturalKey;
+        const videoLink = videoKey
+          ? `\n\n---\n[영상 보기](https://www.jw.org/finder?srcid=share&wtlocale=K&lank=${videoKey})`
+          : "";
+        const finalText = taggedText + videoLink;
+
+        fs.writeFile(currentPathWithTitle, finalText, { flag: "wx" }, (err) => {
           if (err) return;
           console.log(`[NEW_FILE] ${currentPathWithTitle}`);
         });

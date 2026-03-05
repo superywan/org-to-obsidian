@@ -841,6 +841,12 @@ export const parseArticleContent = async (html, docidMap = {}) => {
     extractText($("body"));
   }
 
+  // 원문 링크 추가: HTML class에서 docId 추출
+  const docIdMatch = html.match(/docId-(\d+)/);
+  if (docIdMatch) {
+    lines.push(`---\n[원문 보기](https://wol.jw.org/ko/wol/d/r8/lp-ko/${docIdMatch[1]})`);
+  }
+
   return lines
     .map((l) => l.trim())
     .filter((l) => l.length > 0)

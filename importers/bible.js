@@ -83,7 +83,7 @@ const buildBookPathMap = (books) => {
 };
 
 // ── 성경 장 본문 파싱 (커스텀, async) ───────────────
-const parseBibleChapter = async (html, bookName, chapterNum, bookPathMap, docidMap) => {
+const parseBibleChapter = async (html, bookName, chapterNum, bookNum, bookPathMap, docidMap) => {
   // pc/tc 리다이렉트 사전 해결
   await preResolveLinks(html);
 
@@ -255,6 +255,9 @@ const parseBibleChapter = async (html, bookName, chapterNum, bookPathMap, docidM
     }
   }
 
+  // 원문 링크
+  lines.push(`---\n[원문 보기](${WOL_BASE_URL}/ko/wol/b/r8/lp-ko/nwtsty/${bookNum}/${chapterNum})`);
+
   return {
     content: lines.filter((l) => l.trim()).join("\n\n"),
     docId: chapterDocId,
@@ -401,6 +404,7 @@ export const importBible = async (
           html,
           book.name,
           ch,
+          book.num,
           bookPathMap,
           docidMap
         );

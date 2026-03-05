@@ -666,7 +666,7 @@ export const preResolveLinks = async (html) => {
     const href = $(el).attr("href") || "";
     if (
       (href.includes("/wol/pc/") || href.includes("/wol/tc/")) &&
-      !_redirectCache[href]
+      (!_redirectCache[href] || !String(_redirectCache[href]).includes("#"))
     ) {
       toResolve.add(href);
     }

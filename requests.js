@@ -77,8 +77,11 @@ export const getRedirectTargetAPI = async (url) => {
   }
   // 200: 일부 pc 링크는 리다이렉트 없이 본문에 docId 링크 포함
   if (resp.status === 200 && typeof resp.data === "string") {
-    const match = resp.data.match(/\/wol\/d\/r8\/lp-ko\/(\d+)/);
-    if (match) return `/ko/wol/d/r8/lp-ko/${match[1]}`;
+    const match = resp.data.match(/\/wol\/d\/r8\/lp-ko\/(\d+)(?:#([^"'\s<>]*))?/);
+    if (match) {
+      const frag = match[2] ? `#${match[2]}` : "";
+      return `/ko/wol/d/r8/lp-ko/${match[1]}${frag}`;
+    }
   }
   return null;
 };

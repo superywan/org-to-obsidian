@@ -120,6 +120,39 @@ rm -rf /path/to/vault/library/org-*/
 ## 변경 이력
 
 <details>
+<summary><strong>v1.3</strong> — pc/tc 리다이렉트 fragment 복원</summary>
+
+### 버그 수정: 출판물 참조 링크가 항상 문서 맨 처음으로 이동하던 문제
+
+성경 참고자료(연구 자료, 출판물 색인 등)의 출판물 링크를 클릭하면, 해당 단락이 아닌 문서 맨 처음으로 이동하던 버그를 수정했습니다.
+
+**원인:** WOL의 `/wol/pc/`, `/wol/tc/` 리다이렉트는 `#h=5:0-6:0` 같은 단락 위치 fragment를 포함하지만, `redirect-cache.json`이 fragment 캡처 코드 추가 이전에 구축되어 344K개 항목이 fragment 없이 저장되어 있었습니다. `preResolveLinks`는 이미 캐시된 항목을 건너뛰므로, 이전에 저장된 항목은 fragment 없이 남아 있었습니다.
+
+**수정 내용:**
+
+1. `preResolveLinks()` — fragment가 없는 기존 캐시 항목을 재해석하도록 변경
+   ```js
+   // 변경 전: 캐시에 있으면 무조건 건너뜀
+   !_redirectCache[href]
+   // 변경 후: 캐시에 있더라도 fragment 없으면 재해석
+   (!_redirectCache[href] || !String(_redirectCache[href]).includes("#"))
+   ```
+
+2. `getRedirectTargetAPI()` — 200 응답에서 URL 추출 시 fragment 보존
+   ```js
+   // 변경 전: fragment 버림
+   resp.data.match(/\/wol\/d\/r8\/lp-ko\/(\d+)/)
+   // 변경 후: fragment 포함 캡처
+   resp.data.match(/\/wol\/d\/r8\/lp-ko\/(\d+)(?:#([^"'\s<>]*))?/)
+   ```
+
+**결과:** 재임포트 시 `[[서적#^p23|85면]]` 형태의 단락 딥링크가 생성되어 해당 위치로 바로 이동합니다.
+
+> **참고:** 이 수정 후 `redirect-cache.json`을 초기화(`{}`)하고 전체 재임포트가 필요합니다.
+
+</details>
+
+<details>
 <summary><strong>v1.2</strong> — 단락 딥링크 + 영상 자막 성구 태그</summary>
 
 ### 단락 블록 ID 및 딥링크

@@ -273,4 +273,3 @@ WOL HTML의 모든 내부 참조를 Obsidian wikilink로 자동 변환합니다.
 브라우저 기반 UI로 카테고리/세부 항목 선택, SSE 실시간 로그 스트리밍 지원.
 
 </details>
-test

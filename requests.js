@@ -64,23 +64,35 @@ export const getPublicationArticleAPI = async (docId) => {
 };
 
 // 307 리다이렉트 또는 200 페이지에서 대상 URL 반환
-export const getRedirectTargetAPI = async (url) => {
-  const resp = await axios.get(url, {
-    headers: WOL_HEADERS,
-    maxRedirects: 0,
-    validateStatus: () => true,
-    timeout: 15000,
-  });
-  // 307 등 리다이렉트
-  if (resp.status >= 300 && resp.status < 400) {
-    return resp.headers.location || null;
-  }
-  // 200: 일부 pc 링크는 리다이렉트 없이 본문에 docId 링크 포함
-  if (resp.status === 200 && typeof resp.data === "string") {
-    const match = resp.data.match(/\/wol\/d\/r8\/lp-ko\/(\d+)(?:#([^"'\s<>]*))?/);
-    if (match) {
-      const frag = match[2] ? `#${match[2]}` : "";
-      return `/ko/wol/d/r8/lp-ko/${match[1]}${frag}`;
+// 타임아웃/네트워크 오류 시 백오프 재시도 (기본 3회). HTTP 응답이
+// 정상적으로 오면(리다이렉트 없음 포함) 재시도하지 않고 즉시 반환.
+export const getRedirectTargetAPI = async (url, retries = 3) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const resp = await axios.get(url, {
+        headers: WOL_HEADERS,
+        maxRedirects: 0,
+        validateStatus: () => true,
+        timeout: 30000,
+      });
+      // 307 등 리다이렉트
+      if (resp.status >= 300 && resp.status < 400) {
+        return resp.headers.location || null;
+      }
+      // 200: 일부 pc 링크는 리다이렉트 없이 본문에 docId 링크 포함
+      if (resp.status === 200 && typeof resp.data === "string") {
+        const match = resp.data.match(/\/wol\/d\/r8\/lp-ko\/(\d+)(?:#([^"'\s<>]*))?/);
+        if (match) {
+          const frag = match[2] ? `#${match[2]}` : "";
+          return `/ko/wol/d/r8/lp-ko/${match[1]}${frag}`;
+        }
+      }
+      return null;
+    } catch (e) {
+      // 마지막 시도까지 실패하면 상위로 던짐 (preResolve가 로깅 후 스킵)
+      if (attempt === retries) throw e;
+      // 백오프: 1초, 2초 … 후 재시도
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
     }
   }
   return null;

@@ -120,6 +120,38 @@ rm -rf /path/to/vault/library/org-*/
 ## 변경 이력
 
 <details>
+<summary><strong>v1.4</strong> — 성경 우선 임포트 + 리다이렉트 해석 안정화</summary>
+
+### 성경 임포터 항상 최우선 실행
+
+`buildBibleMappings`/`importBible`를 Phase 1·2 모두 맨 앞으로 이동했습니다.
+
+**이유:** 성경 임포트는 `book-name-map.json`(성경 책이름 → 번호)을 생성하고, 성구 wikilink에 필요한 `b:책:장` 키를 `docid-map.json`에 채웁니다. 이전에는 성경이 맨 마지막에 실행되어, 성경을 함께 선택하지 않거나 순서에 따라 다른 콘텐츠의 성구 태그/링크가 누락될 수 있었습니다.
+
+**결과:** 어떤 조합으로 선택해도 성경이 항상 먼저 처리되어, 다른 문서의 성구 wikilink가 온전히 연결됩니다.
+
+> **참고:** 전체 재임포트 시 성경(bible)을 반드시 함께 선택하세요. 선택하지 않으면 `book-name-map.json`이 생성되지 않아 성구 태그가 누락됩니다.
+
+### pc/tc 리다이렉트 해석 타임아웃/재시도 강화
+
+`getRedirectTargetAPI()`가 타임아웃 하나에 링크를 버리던 문제를 개선했습니다.
+
+**수정 내용:**
+
+1. 타임아웃 15초 → 30초 (다른 WOL 호출과 동일)
+2. 타임아웃/네트워크 오류 시 백오프 재시도(1초 → 2초, 최대 3회) 추가. 정상 HTTP 응답은 재시도 없이 즉시 반환.
+
+```js
+// 변경 전: 단일 시도, 15초 타임아웃 — 실패 시 링크 스킵
+// 변경 후: 30초 타임아웃 + 3회 백오프 재시도
+export const getRedirectTargetAPI = async (url, retries = 3) => { ... }
+```
+
+**결과:** `preResolveLinks`에서 `timeout of 15000ms exceeded`로 링크가 대량 실패하던 현상이 완화됩니다. 실패한 링크는 캐시에 저장되지 않으므로, 재실행 시 실패분만 다시 시도합니다.
+
+</details>
+
+<details>
 <summary><strong>v1.3</strong> — pc/tc 리다이렉트 fragment 복원</summary>
 
 ### 버그 수정: 출판물 참조 링크가 항상 문서 맨 처음으로 이동하던 문제

@@ -174,6 +174,10 @@ const SINGLE_CHAPTER_BOOKS = new Set([31, 57, 63, 64, 65]); // 오바댜, 빌레
 let _bookNameMap = {};
 let _redirectCache = {};
 let _scriptureRegex = null;
+// pc/tc 리다이렉트 엔드포인트가 차단(연속 실패)으로 판단되면 true.
+// 이후 이번 실행 동안 모든 기사에서 preResolve를 건너뛴다.
+// loadMap()에서 초기화되므로 다음 임포트 실행 때 다시 시도한다.
+let _preResolveBlocked = false;
 
 // ── docId 매핑 로드/저장 ─────────────────────
 export const loadMap = () => {
@@ -182,6 +186,7 @@ export const loadMap = () => {
     _bookNameMap = loadBookNameMap();
     _redirectCache = loadRedirectCache();
     _scriptureRegex = null; // 맵 변경 시 정규식 캐시 무효화
+    _preResolveBlocked = false; // 새 실행마다 차단 감지 리셋
     return map;
   } catch {
     return {};
@@ -659,6 +664,10 @@ export const resolveLink = (map, href, displayText, lastBcCtx = null) => {
 
 // ── HTML에서 미해결 pc/tc 링크 배치 해결 ────
 export const preResolveLinks = async (html) => {
+  // 이번 실행에서 이미 pc/tc 차단이 감지됐으면 즉시 건너뜀
+  // (기사마다 벽에 부딪혀 수 분씩 낭비하는 것을 방지)
+  if (_preResolveBlocked) return;
+
   const $ = cheerio.load(html);
   const toResolve = new Set();
 
@@ -676,6 +685,11 @@ export const preResolveLinks = async (html) => {
 
   console.log(`  [preResolve] ${toResolve.size}개 미캐시 링크 해석 시작...`);
   let resolved = 0;
+  let consecutiveFail = 0;
+  // 회로 차단기: 연속 실패가 이 횟수에 도달하면 네트워크 문제로 판단하고
+  // 나머지 링크 해석을 중단(임포트는 계속). 미해석 링크는 캐시에 저장되지
+  // 않으므로 재실행 시 자동으로 다시 시도됨.
+  const FAIL_ABORT_THRESHOLD = 8;
   for (const href of toResolve) {
     try {
       const fullUrl = href.startsWith("http")
@@ -692,6 +706,7 @@ export const preResolveLinks = async (html) => {
             : docIdMatch[1];
         }
       }
+      consecutiveFail = 0;
       resolved++;
       if (resolved % 20 === 0 || resolved === toResolve.size) {
         console.log(`  [preResolve] ${resolved}/${toResolve.size} 완료`);
@@ -699,7 +714,13 @@ export const preResolveLinks = async (html) => {
       await delay(100);
     } catch (e) {
       resolved++;
+      consecutiveFail++;
       console.log(`  [preResolve] ${resolved}/${toResolve.size} 실패: ${e.message?.substring(0, 60)}`);
+      if (consecutiveFail >= FAIL_ABORT_THRESHOLD) {
+        _preResolveBlocked = true; // 이번 실행 동안 이후 기사에서도 preResolve 건너뜀
+        console.log(`  [preResolve] 연속 ${consecutiveFail}회 실패 — pc/tc 차단으로 판단하여 이번 실행에서 남은 링크 해석을 모두 건너뜁니다. (차단 해제 후 재실행하면 재시도)`);
+        break;
+      }
     }
   }
 

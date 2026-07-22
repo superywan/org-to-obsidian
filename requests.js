@@ -5,6 +5,10 @@ const language = "KO";
 const WOL_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   "Accept-Language": "ko-KR,ko;q=0.9",
+  // Referer 필수: WOL WAF는 브라우저 UA인데 Referer가 없으면 /wol/pc/,
+  // /wol/tc/ 리다이렉트 요청을 봇으로 판단해 응답 없이 차단(silent drop)한다.
+  // 값은 same-origin이기만 하면 되며(어떤 wol.jw.org URL이든 통과) 존재 여부만 검사한다.
+  "Referer": "https://wol.jw.org/ko",
 };
 
 export const getJWORGTokenAPI = async () => {

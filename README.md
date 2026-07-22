@@ -120,7 +120,28 @@ rm -rf /path/to/vault/library/org-*/
 ## 변경 이력
 
 <details>
-<summary><strong>v1.4</strong> — 성경 우선 임포트 + 리다이렉트 해석 안정화</summary>
+<summary><strong>v1.4</strong> — 성경 우선 임포트 + pc/tc 차단(Referer) 해결</summary>
+
+### 버그 수정: pc/tc 리다이렉트가 전부 타임아웃되던 문제 (Referer 누락)
+
+`preResolveLinks`에서 `/wol/pc/`, `/wol/tc/` 리다이렉트 요청이 `timeout of 15000ms exceeded`로 **전부 실패**하던 문제를 해결했습니다.
+
+**원인:** WOL의 WAF가 **브라우저 User-Agent를 보내면서 `Referer` 헤더가 없는** 요청을 봇으로 판단해, 응답 없이 연결을 버립니다(silent drop → 클라이언트는 타임아웃). 문서(`/wol/d/`)는 통과하지만 pc/tc 리다이렉트 엔드포인트만 차단됩니다. 진단 결과:
+
+| 조건 | 결과 |
+|------|------|
+| 브라우저 UA, Referer 없음 | ❌ 타임아웃 (0 bytes) |
+| 브라우저 UA + Referer | ✅ HTTP 307 |
+
+Referer 값은 same-origin이기만 하면 되며(어떤 `wol.jw.org` URL이든), 존재 여부만 검사합니다.
+
+**수정 내용:**
+
+1. `WOL_HEADERS`에 `Referer: "https://wol.jw.org/ko"` 추가 — 근본 해결
+2. `getRedirectTargetAPI()` 타임아웃 15초 → 30초, 타임아웃/네트워크 오류 시 백오프 재시도(1초 → 2초, 최대 3회)
+3. `preResolveLinks()` 회로 차단기 — 연속 8회 실패 시 pc/tc 차단으로 판단하여 이번 실행의 남은 링크 해석을 모두 건너뜀(임포트는 계속). 미해석 링크는 캐시에 저장되지 않아 재실행 시 자동 재시도.
+
+**결과:** pc/tc 인용 링크가 정상적으로 단락 딥링크로 변환됩니다. 혹시 WOL이 다시 차단하더라도 회로 차단기로 임포트가 멈추지 않습니다.
 
 ### 성경 임포터 항상 최우선 실행
 
@@ -131,23 +152,6 @@ rm -rf /path/to/vault/library/org-*/
 **결과:** 어떤 조합으로 선택해도 성경이 항상 먼저 처리되어, 다른 문서의 성구 wikilink가 온전히 연결됩니다.
 
 > **참고:** 전체 재임포트 시 성경(bible)을 반드시 함께 선택하세요. 선택하지 않으면 `book-name-map.json`이 생성되지 않아 성구 태그가 누락됩니다.
-
-### pc/tc 리다이렉트 해석 타임아웃/재시도 강화
-
-`getRedirectTargetAPI()`가 타임아웃 하나에 링크를 버리던 문제를 개선했습니다.
-
-**수정 내용:**
-
-1. 타임아웃 15초 → 30초 (다른 WOL 호출과 동일)
-2. 타임아웃/네트워크 오류 시 백오프 재시도(1초 → 2초, 최대 3회) 추가. 정상 HTTP 응답은 재시도 없이 즉시 반환.
-
-```js
-// 변경 전: 단일 시도, 15초 타임아웃 — 실패 시 링크 스킵
-// 변경 후: 30초 타임아웃 + 3회 백오프 재시도
-export const getRedirectTargetAPI = async (url, retries = 3) => { ... }
-```
-
-**결과:** `preResolveLinks`에서 `timeout of 15000ms exceeded`로 링크가 대량 실패하던 현상이 완화됩니다. 실패한 링크는 캐시에 저장되지 않으므로, 재실행 시 실패분만 다시 시도합니다.
 
 </details>
 

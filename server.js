@@ -324,6 +324,11 @@ const server = http.createServer(async (req, res) => {
 
         broadcast("log", "=== docId 매핑 구축 시작 ===");
 
+        // 성경 매핑을 항상 최우선으로 구축 — book-name-map 생성 및
+        // 성구 wikilink용 b:책:장 키가 다른 콘텐츠 임포트 전에 준비되어야 함
+        if (options.bible) {
+          prepared.bible = await buildBibleMappings(docidMap, options.bibleSelection ?? null);
+        }
         if (options.books) {
           prepared.books = await buildBookMappings(docidMap, options.pubSelection ?? null);
         }
@@ -363,9 +368,6 @@ const server = http.createServer(async (req, res) => {
         if (options.index) {
           prepared.index = await buildIndexMappings(docidMap, options.indexSelection ?? null);
         }
-        if (options.bible) {
-          prepared.bible = await buildBibleMappings(docidMap, options.bibleSelection ?? null);
-        }
 
         saveMap(docidMap);
         const mapSize = Object.keys(docidMap).length;
@@ -374,6 +376,14 @@ const server = http.createServer(async (req, res) => {
         // ═══════════════════════════════════════════════════
         // Phase 2: 콘텐츠 임포트 (매핑 활용하여 내부 링크 변환)
         // ═══════════════════════════════════════════════════
+
+        // 성경을 항상 최우선으로 임포트 — 성경 파일이 먼저 존재해야
+        // 다른 콘텐츠의 성구 wikilink가 올바르게 연결됨
+        if (options.bible) {
+          broadcast("log", "=== 성경 임포트 시작 ===");
+          await importBible(listOfExistingFiles, docidMap, prepared.bible);
+          broadcast("log", "=== 성경 임포트 완료 ===");
+        }
 
         if (options.videos) {
           broadcast("log", "=== 영상 자막 임포트 시작 ===");
@@ -459,12 +469,6 @@ const server = http.createServer(async (req, res) => {
           broadcast("log", "=== 색인 임포트 시작 ===");
           await importOrgIndex(listOfExistingFiles, docidMap, prepared.index);
           broadcast("log", "=== 색인 임포트 완료 ===");
-        }
-
-        if (options.bible) {
-          broadcast("log", "=== 성경 임포트 시작 ===");
-          await importBible(listOfExistingFiles, docidMap, prepared.bible);
-          broadcast("log", "=== 성경 임포트 완료 ===");
         }
 
         broadcast("done", "모든 임포트가 완료됐습니다!");

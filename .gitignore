@@ -2,3 +2,6 @@
 /node_modules
 /error
 /subtitles
+book-name-map.json
+docid-map.json
+redirect-cache.json

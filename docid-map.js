@@ -708,7 +708,9 @@ export const preResolveLinks = async (html) => {
       }
       consecutiveFail = 0;
       resolved++;
-      if (resolved % 20 === 0 || resolved === toResolve.size) {
+      // pc 리다이렉트 1건당 수 초 걸리므로 5건마다 진행 로그 출력
+      // (멈춘 것처럼 보이지 않도록)
+      if (resolved % 5 === 0 || resolved === toResolve.size) {
         console.log(`  [preResolve] ${resolved}/${toResolve.size} 완료`);
       }
       await delay(100);

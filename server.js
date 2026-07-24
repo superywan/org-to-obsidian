@@ -40,6 +40,22 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// ── 구조 캐시 (Phase 1 크롤 결과) ────────────────
+// 각 모듈의 buildXMappings 반환값(prepared)을 모듈별로 저장해두고,
+// "구조 캐시 사용" 토글 시 재크롤을 생략한다. 오류로 재실행해도
+// Phase 1을 건너뛰고 이어서 진행할 수 있다.
+const PREPARED_CACHE_FILE = path.join(__dirname, "prepared-cache.json");
+const loadPreparedCache = () => {
+  try {
+    return JSON.parse(fs.readFileSync(PREPARED_CACHE_FILE, "utf-8"));
+  } catch {
+    return {};
+  }
+};
+const savePreparedCache = (cache) => {
+  fs.writeFileSync(PREPARED_CACHE_FILE, JSON.stringify(cache, null, 2));
+};
+
 let sseClients = [];
 let isImporting = false;
 
@@ -322,51 +338,71 @@ const server = http.createServer(async (req, res) => {
         const docidMap = loadMap();
         const prepared = {};
 
+        // 구조 캐시: 토글 ON이면 이전 크롤 결과를 재사용해 재크롤 생략
+        const useStructureCache = !!options.useStructureCache;
+        const preparedCache = useStructureCache ? loadPreparedCache() : {};
+
+        // 모듈별 헬퍼 — 캐시에 있으면 크롤 생략, 없으면 크롤 후 즉시 체크포인트.
+        // buildXMappings는 docidMap도 채우므로, 크롤한 경우 docid-map과
+        // prepared-cache를 함께 저장해 정합성을 맞춘다(중간 실패 대비).
+        const prepareModule = async (name, builder) => {
+          if (useStructureCache && preparedCache[name] !== undefined) {
+            broadcast("log", `  [구조 캐시] ${name} 재사용 (크롤 생략)`);
+            return preparedCache[name];
+          }
+          const result = await builder();
+          saveMap(docidMap); // docid-map(+redirect-cache) 체크포인트
+          preparedCache[name] = result;
+          savePreparedCache(preparedCache); // prepared 체크포인트
+          return result;
+        };
+
         broadcast("log", "=== docId 매핑 구축 시작 ===");
+        if (useStructureCache) broadcast("log", "  (구조 캐시 사용: 캐시된 모듈은 재크롤 생략)");
 
         // 성경 매핑을 항상 최우선으로 구축 — book-name-map 생성 및
         // 성구 wikilink용 b:책:장 키가 다른 콘텐츠 임포트 전에 준비되어야 함
         if (options.bible) {
-          prepared.bible = await buildBibleMappings(docidMap, options.bibleSelection ?? null);
+          prepared.bible = await prepareModule("bible", () => buildBibleMappings(docidMap, options.bibleSelection ?? null));
         }
         if (options.books) {
-          prepared.books = await buildBookMappings(docidMap, options.pubSelection ?? null);
+          prepared.books = await prepareModule("books", () => buildBookMappings(docidMap, options.pubSelection ?? null));
         }
         if (options.insight) {
-          prepared.insight = await buildInsightMappings(docidMap, options.insightSelection ?? null);
+          prepared.insight = await prepareModule("insight", () => buildInsightMappings(docidMap, options.insightSelection ?? null));
         }
         if (options.watchtower) {
-          prepared.watchtower = await buildWatchtowerMappings(docidMap, options.watchtowerSelection ?? null);
+          prepared.watchtower = await prepareModule("watchtower", () => buildWatchtowerMappings(docidMap, options.watchtowerSelection ?? null));
         }
         if (options.awake) {
-          prepared.awake = await buildAwakeMappings(docidMap, options.awakeSelection ?? null);
+          prepared.awake = await prepareModule("awake", () => buildAwakeMappings(docidMap, options.awakeSelection ?? null));
         }
         if (options.meeting) {
-          prepared.meeting = await buildMeetingMappings(docidMap, options.meetingSelection ?? null);
+          prepared.meeting = await prepareModule("meeting", () => buildMeetingMappings(docidMap, options.meetingSelection ?? null));
         }
         if (options.kingdomService) {
-          prepared.kingdomService = await buildKingdomServiceMappings(docidMap, options.kingdomServiceSelection ?? null);
+          prepared.kingdomService = await prepareModule("kingdomService", () => buildKingdomServiceMappings(docidMap, options.kingdomServiceSelection ?? null));
         }
         if (options.programs) {
-          prepared.programs = await buildProgramMappings(docidMap, options.programSelection ?? null);
+          prepared.programs = await prepareModule("programs", () => buildProgramMappings(docidMap, options.programSelection ?? null));
         }
         if (options.brochures) {
-          prepared.brochures = await buildBrochureMappings(docidMap, options.brochureSelection ?? null);
+          prepared.brochures = await prepareModule("brochures", () => buildBrochureMappings(docidMap, options.brochureSelection ?? null));
         }
         if (options.tracts) {
-          prepared.tracts = await buildTractMappings(docidMap, options.tractSelection ?? null);
+          prepared.tracts = await prepareModule("tracts", () => buildTractMappings(docidMap, options.tractSelection ?? null));
         }
         if (options.webSeries) {
-          prepared.webSeries = await buildWebSeriesMappings(docidMap, options.webSeriesSelection ?? null);
+          prepared.webSeries = await prepareModule("webSeries", () => buildWebSeriesMappings(docidMap, options.webSeriesSelection ?? null));
         }
         if (options.guidelines) {
-          prepared.guidelines = await buildGuidelineMappings(docidMap, options.guidelineSelection ?? null);
+          prepared.guidelines = await prepareModule("guidelines", () => buildGuidelineMappings(docidMap, options.guidelineSelection ?? null));
         }
         if (options.glossary) {
-          prepared.glossary = await buildGlossaryMappings(docidMap, options.glossarySelection ?? null);
+          prepared.glossary = await prepareModule("glossary", () => buildGlossaryMappings(docidMap, options.glossarySelection ?? null));
         }
         if (options.index) {
-          prepared.index = await buildIndexMappings(docidMap, options.indexSelection ?? null);
+          prepared.index = await prepareModule("index", () => buildIndexMappings(docidMap, options.indexSelection ?? null));
         }
 
         saveMap(docidMap);

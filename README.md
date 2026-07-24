@@ -33,6 +33,18 @@ node server.js
 - 각 카테고리별 토글로 임포트 대상 선택
 - 세부 항목(연도, 출판물 등) 선택 가능
 - 실시간 로그 스트리밍으로 진행 상황 확인
+- **🗂️ 구조 캐시 사용** 토글 — 이전 Phase 1 크롤 결과를 재사용해 재크롤을 생략(아래 참고)
+
+#### 🗂️ 구조 캐시 (오류 후 이어서 / 재실행 가속)
+
+임포트는 2단계입니다: **Phase 1**(출판물 구조 크롤 → docId 매핑) → **Phase 2**(문서 다운로드·변환). Phase 1은 매 실행 재크롤되어 시간이 걸리고, 중간에 오류가 나면 처음부터 다시 해야 했습니다.
+
+**구조 캐시**를 켜면 Phase 1의 모듈별 크롤 결과(`prepared-cache.json`)와 `docid-map`을 **모듈이 끝날 때마다 즉시 저장**하고, 다음 실행에서 캐시된 모듈은 **재크롤을 건너뜁니다.**
+
+- ✅ 오류로 재실행해도 Phase 1을 건너뛰고 이어서 진행
+- ✅ 재실행 시 구조 크롤 시간 절약
+- ⚠️ 캐시를 쓰는 동안 **새로 나온 호수/기사는 놓칠 수 있음** → 최신 콘텐츠를 받을 땐 토글 OFF
+- 기본값 OFF (끄면 기존과 동일하게 매번 크롤)
 
 ### CLI로 실행
 
@@ -98,6 +110,45 @@ node tag-vault-folder.js "메모/성구노트"
 5. `/wol/pc/`, `/wol/tc/` 리다이렉트 링크를 배치로 해결
 6. `.md` 파일로 저장 (이미 존재하는 파일은 스킵)
 
+### 진행 흐름도
+
+```mermaid
+flowchart TD
+    Start(["임포트 시작"]) --> Sel["카테고리 선택 +<br/>구조 캐시 토글"]
+    Sel --> P1
+
+    subgraph P1 [Phase 1 · 구조 매핑 — 선택한 모듈마다 반복]
+        direction TB
+        Cache{"구조 캐시 ON<br/>& 캐시 있음?"}
+        Cache -->|"예"| Reuse["캐시 재사용<br/>재크롤 생략"]
+        Cache -->|"아니오"| Crawl["출판물 구조 크롤<br/>→ docid-map 채움"]
+        Crawl --> Ckpt["체크포인트 저장<br/>prepared-cache + docid-map"]
+    end
+
+    P1 --> P2
+
+    subgraph P2 [Phase 2 · 콘텐츠 임포트 — 성경부터, 문서마다 반복]
+        direction TB
+        Exist{"파일 이미 존재?"}
+        Exist -->|"예"| SkipIt["스킵"]
+        Exist -->|"아니오"| Fetch["HTML 다운로드"]
+        Fetch --> Pre["preResolve<br/>pc/tc 링크 해석"]
+        Pre --> RC{"redirect-cache<br/>에 있음?"}
+        RC -->|"예"| Hit["즉시 사용"]
+        RC -->|"아니오"| Req["WOL 요청<br/>Referer + 재시도"]
+        Req --> Fail{"연속 8회 실패?"}
+        Fail -->|"예"| Stop["preResolve 중단<br/>임포트는 계속"]
+        Fail -->|"아니오"| Store["redirect-cache 저장"]
+        Hit --> Conv["Markdown 변환 +<br/>wikilink · 성구 태그"]
+        Store --> Conv
+        Conv --> Save[".md 파일 저장"]
+    end
+
+    P2 --> Done(["완료"])
+```
+
+> Phase 1은 선택한 **모든** 모듈을 먼저 매핑한 뒤에야 Phase 2로 넘어갑니다. 그래서 성경의 연구 자료 링크가 다른 출판물로 연결되려면 그 출판물도 **같은 실행에서 함께** 선택해야 합니다.
+
 ### 데이터 소스
 
 | 소스 | 용도 |
@@ -114,6 +165,7 @@ node tag-vault-folder.js "메모/성구노트"
 | `docid-map.json` | docId ↔ Vault 경로 매핑 | Phase 1에서 자동 생성/갱신 |
 | `redirect-cache.json` | WOL 리다이렉트 결과 캐시 | 네트워크 요청 절약 (수 만 건) |
 | `book-name-map.json` | 성경 책이름 → 번호 매핑 | 성경 임포트 시 자동 생성 |
+| `prepared-cache.json` | Phase 1 구조 크롤 결과 | 구조 캐시 토글 시 재크롤 생략 |
 
 ## 프로젝트 구조
 
@@ -147,6 +199,29 @@ node tag-vault-folder.js "메모/성구노트"
 ```
 
 ## 변경 이력
+
+<details>
+<summary><strong>v1.5</strong> — 구조 캐시(체크포인트) + 볼트 폴더 성구 태깅 도구</summary>
+
+### 구조 캐시 — Phase 1 재크롤 생략 / 오류 후 이어서
+
+Phase 1(출판물 구조 크롤)은 매 실행 재크롤되어 시간이 걸리고, 중간에 오류가 나면 처음부터 다시 해야 했습니다. 이를 체크포인트로 해결했습니다.
+
+- 각 모듈의 `buildXMappings` 결과(`prepared`)를 **모듈이 끝날 때마다 즉시** `prepared-cache.json`에 저장.
+- 같은 시점에 `docid-map`도 함께 저장 — `buildXMappings`가 docidMap도 채우므로, 재사용 시 정합성이 맞도록 **둘을 같이 체크포인트**.
+- 웹 UI **"🗂️ 구조 캐시 사용"** 토글 ON → 캐시된 모듈은 재크롤 생략. 기본 OFF.
+- 트레이드오프: 캐시 사용 중에는 새로 나온 호수/기사를 놓칠 수 있음(최신 콘텐츠는 OFF로 받기).
+
+### 볼트 폴더 성구 태깅 도구 (`tag-vault-folder.js`)
+
+직접 작성한 md 파일에도 임포터와 동일한 로직으로 성구 태그(+wikilink)를 다는 도구. 자세한 사용법은 [사용법 > 내 노트에 성구 태그 달기](#내-노트에-성구-태그-달기-tag-vault-folderjs) 참고.
+
+### 기타
+
+- `preResolve` 진행 로그를 20건 → 5건마다로 세분화(멈춘 것처럼 보이지 않도록).
+- 재생성되는 캐시(`book-name-map`/`docid-map`/`redirect-cache`/`prepared-cache`)는 git 추적 제외.
+
+</details>
 
 <details>
 <summary><strong>v1.4</strong> — 성경 우선 임포트 + pc/tc 차단(Referer) 해결</summary>

@@ -352,6 +352,10 @@
     <button class="bulk-btn" id="bulkRest" onclick="toggleBulk('rest')">📚 나머지 전체</button>
     <button class="bulk-btn" id="bulkAll" onclick="toggleBulk('all')">✅ 모두 선택</button>
   </div>
+  <label style="display:flex;align-items:center;gap:8px;margin:10px 0;font-size:0.9em;cursor:pointer;">
+    <input type="checkbox" id="useStructureCache" />
+    <span>🗂️ 구조 캐시 사용 (오류 후 이어서 — 재크롤 생략, 새 콘텐츠는 놓칠 수 있음)</span>
+  </label>
   <button id="startBtn" onclick="startImport()" disabled>임포트 시작</button>
   <div class="status" id="status"></div>
 </div>
@@ -503,6 +507,7 @@
         glossary: active.glossary,
         index: active.index,
         bible: active.bible,
+        useStructureCache: document.getElementById('useStructureCache').checked,
       }),
     }).catch(err => appendLog('error', '서버 연결 실패: ' + err.message));
   }

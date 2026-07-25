@@ -246,8 +246,9 @@ export const parseCrossRefText = (text, docidMap) => {
     part = part.trim();
     if (!part) return part;
 
-    // 약어 + 장:절 패턴 (예: "시 102:25", "고전 11:7, 9")
-    const withBook = part.match(/^([가-힣]+)\s+(\d+):(\d+)/);
+    // 약어 + 장:절 패턴 (예: "시 102:25", "고전 11:7, 9", "요1 3:10-12")
+    // 책이름 뒤 숫자 접미사 허용 — 요1/요2/요3(요한1·2·3서) 같은 약어 대응
+    const withBook = part.match(/^([가-힣]+\d*)\s+(\d+):(\d+)/);
     if (withBook) {
       const bookNum = BOOK_ABBREV_MAP[withBook[1]];
       if (bookNum) {
@@ -261,6 +262,24 @@ export const parseCrossRefText = (text, docidMap) => {
           if (crossCh) return `[[${vaultPath}#^v${verse}|${part}]]${makeCrossChapterTags(bookNum, crossCh)}`;
           const allV = extractAllVerses(part);
           return `[[${vaultPath}#^v${verse}|${part}]]${allV ? makeBibleVerseTags(bookNum, chapter, allV) : makeBibleTag(bookNum, chapter, verse)}`;
+        }
+      }
+    }
+
+    // 단장 성경 (유다서·오바댜·빌레몬·요한2·3서): "유 11" → 책 + 절(장 생략)
+    // 장:절 형식이 아니므로 위 withBook에서 걸리지 않음. 장은 1로 간주.
+    const singleCh = part.match(/^([가-힣]+\d*)\s+(\d+)/);
+    if (singleCh) {
+      const bookNum = BOOK_ABBREV_MAP[singleCh[1]];
+      if (bookNum && SINGLE_CHAPTER_BOOKS.has(bookNum)) {
+        currentBookNum = bookNum;
+        // 책이름 뒤 절 표기 전체를 파싱 ("11", "11, 13", "11-13")
+        const verses = parseVerseSpec(part.slice(singleCh[1].length).trim());
+        const firstVerse = verses[0] ?? parseInt(singleCh[2], 10);
+        const key = `b:${bookNum}:1`;
+        const vaultPath = docidMap[key];
+        if (vaultPath) {
+          return `[[${vaultPath}#^v${firstVerse}|${part}]]${verses.length ? makeBibleVerseTags(bookNum, 1, verses) : makeBibleTag(bookNum, 1, firstVerse)}`;
         }
       }
     }

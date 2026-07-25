@@ -33,7 +33,6 @@ const picked = args.filter((a) => !a.startsWith("--"));
 const invalid = picked.filter((k) => !ALL.includes(k));
 if (invalid.length) {
   console.error(`알 수 없는 카테고리: ${invalid.join(", ")}`);
-  console.error("사용 가능한 카테고리 키는 update.js 상단 주석을 참고하세요.");
   process.exit(1);
 }
 

@@ -380,6 +380,9 @@
   ];
   const active = {};
   categories.forEach(k => active[k] = false);
+  // refresh[k]=true 이면 구조 캐시가 있어도 그 모듈만 강제 재크롤
+  const refresh = {};
+  categories.forEach(k => refresh[k] = false);
 
   let newFiles = [];
   let evtSource = null;
@@ -390,6 +393,34 @@
     document.getElementById('card-' + type).classList.toggle('active', active[type]);
     updateUI();
   }
+
+  function toggleRefresh(type) {
+    refresh[type] = !refresh[type];
+    const btn = document.getElementById('refresh-' + type);
+    if (btn) {
+      btn.style.opacity = refresh[type] ? '1' : '0.4';
+      btn.style.borderColor = refresh[type] ? '#4f46e5' : '#888';
+      btn.style.color = refresh[type] ? '#4f46e5' : 'inherit';
+      btn.title = refresh[type]
+        ? '재크롤 ON — 구조 캐시 무시하고 새로 탐색'
+        : '재크롤 OFF — 구조 캐시 재사용 (클릭 시 이 항목만 재탐색)';
+    }
+  }
+
+  // 각 카테고리 카드에 🔄 재크롤 토글 주입 (영상 제외 — 구조 캐시 대상 아님)
+  categories.filter(k => k !== 'videos').forEach(k => {
+    const card = document.getElementById('card-' + k);
+    if (!card) return;
+    card.style.position = 'relative';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'refresh-' + k;
+    btn.textContent = '🔄';
+    btn.title = '재크롤 OFF — 구조 캐시 재사용 (클릭 시 이 항목만 재탐색)';
+    btn.style.cssText = 'position:absolute;top:8px;right:8px;background:none;border:1px solid #888;border-radius:6px;cursor:pointer;font-size:0.85em;opacity:0.4;padding:2px 6px;line-height:1;z-index:2;';
+    btn.onclick = (e) => { e.stopPropagation(); toggleRefresh(k); };
+    card.appendChild(btn);
+  });
 
   function toggleBulk(group) {
     let keys;
@@ -429,8 +460,7 @@
     const line = document.createElement('div');
     line.className = 'log-line ' + type;
     line.textContent = message;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
+    box.insertBefore(line, box.firstChild); // 최신 로그를 맨 위에 표시
   }
 
   function addNewFile(filePath) {
@@ -508,6 +538,7 @@
         index: active.index,
         bible: active.bible,
         useStructureCache: document.getElementById('useStructureCache').checked,
+        refreshModules: categories.filter(k => refresh[k]),
       }),
     }).catch(err => appendLog('error', '서버 연결 실패: ' + err.message));
   }

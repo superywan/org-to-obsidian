@@ -340,15 +340,21 @@ const server = http.createServer(async (req, res) => {
 
         // 구조 캐시: 토글 ON이면 이전 크롤 결과를 재사용해 재크롤 생략
         const useStructureCache = !!options.useStructureCache;
+        // refreshModules: 구조 캐시가 있어도 강제로 재크롤할 모듈 목록
+        // (지속 갱신되는 출판물의 새 항목을 확인할 때 사용)
+        const refreshSet = new Set(options.refreshModules || []);
         const preparedCache = useStructureCache ? loadPreparedCache() : {};
 
         // 모듈별 헬퍼 — 캐시에 있으면 크롤 생략, 없으면 크롤 후 즉시 체크포인트.
         // buildXMappings는 docidMap도 채우므로, 크롤한 경우 docid-map과
         // prepared-cache를 함께 저장해 정합성을 맞춘다(중간 실패 대비).
         const prepareModule = async (name, builder) => {
-          if (useStructureCache && preparedCache[name] !== undefined) {
+          if (useStructureCache && preparedCache[name] !== undefined && !refreshSet.has(name)) {
             broadcast("log", `  [구조 캐시] ${name} 재사용 (크롤 생략)`);
             return preparedCache[name];
+          }
+          if (useStructureCache && refreshSet.has(name)) {
+            broadcast("log", `  [재크롤] ${name} — 구조 캐시 무시하고 새로 탐색`);
           }
           const result = await builder();
           saveMap(docidMap); // docid-map(+redirect-cache) 체크포인트

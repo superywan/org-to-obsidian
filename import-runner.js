@@ -99,80 +99,95 @@ export async function runImport(options, log = () => {}) {
   // ═══════════════════════════════════════════════════
   // Phase 1: 선택된 모듈의 docId 매핑 구축
   // ═══════════════════════════════════════════════════
-  const docidMap = loadMap();
+  // 매핑이 필요한 모듈(영상 제외)이 하나라도 선택됐을 때만 Phase 1 수행.
+  // 영상 자막은 docid-map을 인자로 받지 않고 video.js가 자체 loadMap을 쓰므로,
+  // 영상만 임포트할 땐 매핑 로드/저장이 불필요하다.
+  const MAPPING_MODULES = [
+    "bible", "books", "insight", "watchtower", "awake", "meeting",
+    "kingdomService", "programs", "brochures", "tracts", "webSeries",
+    "guidelines", "glossary", "index",
+  ];
+  const needsMapping = MAPPING_MODULES.some((k) => options[k]);
+
+  let docidMap = {};
   const prepared = {};
+  let mapSize = 0;
 
-  const useStructureCache = !!options.useStructureCache;
-  const refreshSet = new Set(options.refreshModules || []);
-  const preparedCache = useStructureCache ? loadPreparedCache() : {};
+  if (needsMapping) {
+    docidMap = loadMap();
 
-  // 모듈별 헬퍼 — 캐시에 있고 재크롤 대상이 아니면 크롤 생략,
-  // 아니면 크롤 후 docid-map과 prepared-cache를 함께 즉시 체크포인트.
-  const prepareModule = async (name, builder) => {
-    if (useStructureCache && preparedCache[name] !== undefined && !refreshSet.has(name)) {
-      log("log", `  [구조 캐시] ${name} 재사용 (크롤 생략)`);
-      return preparedCache[name];
+    const useStructureCache = !!options.useStructureCache;
+    const refreshSet = new Set(options.refreshModules || []);
+    const preparedCache = useStructureCache ? loadPreparedCache() : {};
+
+    // 모듈별 헬퍼 — 캐시에 있고 재크롤 대상이 아니면 크롤 생략,
+    // 아니면 크롤 후 docid-map과 prepared-cache를 함께 즉시 체크포인트.
+    const prepareModule = async (name, builder) => {
+      if (useStructureCache && preparedCache[name] !== undefined && !refreshSet.has(name)) {
+        log("log", `  [구조 캐시] ${name} 재사용 (크롤 생략)`);
+        return preparedCache[name];
+      }
+      if (useStructureCache && refreshSet.has(name)) {
+        log("log", `  [재크롤] ${name} — 구조 캐시 무시하고 새로 탐색`);
+      }
+      const result = await builder();
+      saveMap(docidMap);
+      preparedCache[name] = result;
+      savePreparedCache(preparedCache);
+      return result;
+    };
+
+    log("log", "=== docId 매핑 구축 시작 ===");
+    if (useStructureCache) log("log", "  (구조 캐시 사용: 캐시된 모듈은 재크롤 생략)");
+
+    // 성경 매핑을 항상 최우선으로 구축 (book-name-map + b:책:장 키 준비)
+    if (options.bible) {
+      prepared.bible = await prepareModule("bible", () => buildBibleMappings(docidMap, options.bibleSelection ?? null));
     }
-    if (useStructureCache && refreshSet.has(name)) {
-      log("log", `  [재크롤] ${name} — 구조 캐시 무시하고 새로 탐색`);
+    if (options.books) {
+      prepared.books = await prepareModule("books", () => buildBookMappings(docidMap, options.pubSelection ?? null));
     }
-    const result = await builder();
+    if (options.insight) {
+      prepared.insight = await prepareModule("insight", () => buildInsightMappings(docidMap, options.insightSelection ?? null));
+    }
+    if (options.watchtower) {
+      prepared.watchtower = await prepareModule("watchtower", () => buildWatchtowerMappings(docidMap, options.watchtowerSelection ?? null));
+    }
+    if (options.awake) {
+      prepared.awake = await prepareModule("awake", () => buildAwakeMappings(docidMap, options.awakeSelection ?? null));
+    }
+    if (options.meeting) {
+      prepared.meeting = await prepareModule("meeting", () => buildMeetingMappings(docidMap, options.meetingSelection ?? null));
+    }
+    if (options.kingdomService) {
+      prepared.kingdomService = await prepareModule("kingdomService", () => buildKingdomServiceMappings(docidMap, options.kingdomServiceSelection ?? null));
+    }
+    if (options.programs) {
+      prepared.programs = await prepareModule("programs", () => buildProgramMappings(docidMap, options.programSelection ?? null));
+    }
+    if (options.brochures) {
+      prepared.brochures = await prepareModule("brochures", () => buildBrochureMappings(docidMap, options.brochureSelection ?? null));
+    }
+    if (options.tracts) {
+      prepared.tracts = await prepareModule("tracts", () => buildTractMappings(docidMap, options.tractSelection ?? null));
+    }
+    if (options.webSeries) {
+      prepared.webSeries = await prepareModule("webSeries", () => buildWebSeriesMappings(docidMap, options.webSeriesSelection ?? null));
+    }
+    if (options.guidelines) {
+      prepared.guidelines = await prepareModule("guidelines", () => buildGuidelineMappings(docidMap, options.guidelineSelection ?? null));
+    }
+    if (options.glossary) {
+      prepared.glossary = await prepareModule("glossary", () => buildGlossaryMappings(docidMap, options.glossarySelection ?? null));
+    }
+    if (options.index) {
+      prepared.index = await prepareModule("index", () => buildIndexMappings(docidMap, options.indexSelection ?? null));
+    }
+
     saveMap(docidMap);
-    preparedCache[name] = result;
-    savePreparedCache(preparedCache);
-    return result;
-  };
-
-  log("log", "=== docId 매핑 구축 시작 ===");
-  if (useStructureCache) log("log", "  (구조 캐시 사용: 캐시된 모듈은 재크롤 생략)");
-
-  // 성경 매핑을 항상 최우선으로 구축 (book-name-map + b:책:장 키 준비)
-  if (options.bible) {
-    prepared.bible = await prepareModule("bible", () => buildBibleMappings(docidMap, options.bibleSelection ?? null));
+    mapSize = Object.keys(docidMap).length;
+    log("log", `=== docId 매핑 구축 완료 (총 ${mapSize}개 항목) ===`);
   }
-  if (options.books) {
-    prepared.books = await prepareModule("books", () => buildBookMappings(docidMap, options.pubSelection ?? null));
-  }
-  if (options.insight) {
-    prepared.insight = await prepareModule("insight", () => buildInsightMappings(docidMap, options.insightSelection ?? null));
-  }
-  if (options.watchtower) {
-    prepared.watchtower = await prepareModule("watchtower", () => buildWatchtowerMappings(docidMap, options.watchtowerSelection ?? null));
-  }
-  if (options.awake) {
-    prepared.awake = await prepareModule("awake", () => buildAwakeMappings(docidMap, options.awakeSelection ?? null));
-  }
-  if (options.meeting) {
-    prepared.meeting = await prepareModule("meeting", () => buildMeetingMappings(docidMap, options.meetingSelection ?? null));
-  }
-  if (options.kingdomService) {
-    prepared.kingdomService = await prepareModule("kingdomService", () => buildKingdomServiceMappings(docidMap, options.kingdomServiceSelection ?? null));
-  }
-  if (options.programs) {
-    prepared.programs = await prepareModule("programs", () => buildProgramMappings(docidMap, options.programSelection ?? null));
-  }
-  if (options.brochures) {
-    prepared.brochures = await prepareModule("brochures", () => buildBrochureMappings(docidMap, options.brochureSelection ?? null));
-  }
-  if (options.tracts) {
-    prepared.tracts = await prepareModule("tracts", () => buildTractMappings(docidMap, options.tractSelection ?? null));
-  }
-  if (options.webSeries) {
-    prepared.webSeries = await prepareModule("webSeries", () => buildWebSeriesMappings(docidMap, options.webSeriesSelection ?? null));
-  }
-  if (options.guidelines) {
-    prepared.guidelines = await prepareModule("guidelines", () => buildGuidelineMappings(docidMap, options.guidelineSelection ?? null));
-  }
-  if (options.glossary) {
-    prepared.glossary = await prepareModule("glossary", () => buildGlossaryMappings(docidMap, options.glossarySelection ?? null));
-  }
-  if (options.index) {
-    prepared.index = await prepareModule("index", () => buildIndexMappings(docidMap, options.indexSelection ?? null));
-  }
-
-  saveMap(docidMap);
-  const mapSize = Object.keys(docidMap).length;
-  log("log", `=== docId 매핑 구축 완료 (총 ${mapSize}개 항목) ===`);
 
   // ═══════════════════════════════════════════════════
   // Phase 2: 콘텐츠 임포트 (성경부터 — 성구 wikilink 대상 우선 생성)

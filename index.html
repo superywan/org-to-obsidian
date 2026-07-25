@@ -439,7 +439,7 @@
 
   // 정기 업데이트 프리셋: 지속 갱신 출판물만 선택 + 재크롤 ON + 구조 캐시 ON
   function presetUpdate() {
-    const UPDATING = ['watchtower', 'awake', 'meeting', 'kingdomService', 'programs', 'webSeries'];
+    const UPDATING = ['videos', 'watchtower', 'meeting'];
     categories.forEach(k => {
       active[k] = false;
       document.getElementById('card-' + k).classList.remove('active');

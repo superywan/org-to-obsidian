@@ -13,6 +13,12 @@
 // ─────────────────────────────────────────────────────────────
 import { runImport } from "./import-runner.js";
 
+// 정기 업데이트 기본 대상. 여기에 카테고리 키를 넣거나 빼서 조정한다.
+// 사용 가능한 키:
+//   videos, bible, books, insight, watchtower, awake, meeting,
+//   kingdomService, programs, brochures, tracts, webSeries,
+//   guidelines, glossary, index
+// (books는 개별 책이 아니라 서적 카테고리 전체를 뜻함)
 const UPDATING = ["videos", "watchtower", "meeting"];
 const ALL = [
   "bible", "books", "insight", "watchtower", "awake", "meeting",

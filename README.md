@@ -154,7 +154,14 @@ npm run update     # = node update.js  (브라우저 없이, cron 자동화 가�
 
 또는 웹 UI에서 상단 **🔄 정기 업데이트** 버튼 → **시작**.
 
-기본 대상은 **영상·파수대·집회 교재**입니다. (대상 변경은 아래 **더 알아보기 › 정기 업데이트 대상 바꾸기** 참고)
+기본 대상은 **영상·파수대·집회 교재**입니다. 특정 카테고리만 받으려면 인자로 지정하세요:
+
+```bash
+npm run update:videos      # = node update.js videos  (영상 자막만)
+node update.js watchtower  # 파수대만
+```
+
+(대상 변경·전체 목록은 아래 **더 알아보기 › 정기 업데이트 대상 바꾸기** 참고)
 
 <details>
 <summary><strong>cron으로 매월 자동 실행하기</strong></summary>

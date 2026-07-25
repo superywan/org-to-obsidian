@@ -21,7 +21,7 @@ import { runImport } from "./import-runner.js";
 // (books는 개별 책이 아니라 서적 카테고리 전체를 뜻함)
 const UPDATING = ["videos", "watchtower", "meeting"];
 const ALL = [
-  "bible", "books", "insight", "watchtower", "awake", "meeting",
+  "videos", "bible", "books", "insight", "watchtower", "awake", "meeting",
   "kingdomService", "programs", "brochures", "tracts", "webSeries",
   "guidelines", "glossary", "index",
 ];
@@ -33,7 +33,7 @@ const picked = args.filter((a) => !a.startsWith("--"));
 const invalid = picked.filter((k) => !ALL.includes(k));
 if (invalid.length) {
   console.error(`알 수 없는 카테고리: ${invalid.join(", ")}`);
-  console.error(`사용 가능: ${ALL.join(", ")}`);
+  console.error("사용 가능한 카테고리 키는 update.js 상단 주석을 참고하세요.");
   process.exit(1);
 }
 

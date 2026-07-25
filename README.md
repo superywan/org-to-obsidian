@@ -52,20 +52,39 @@ node server.js
 파수대·깨어라처럼 **지속적으로 새 항목이 나오는 출판물**만 최신화하고 싶을 때, 각 카테고리 카드의 **🔄 버튼**을 켜면 구조 캐시가 있어도 **그 모듈만 재크롤**하고 나머지는 캐시를 재사용합니다. (`prepared-cache.json`을 수동으로 지울 필요 없음)
 
 **월간 업데이트 흐름 예시:**
-1. 갱신할 카테고리(예: 파수대·깨어라) 선택
-2. 각 카드의 **🔄 클릭**(보라색 = 재크롤 ON)
-3. **🗂️ 구조 캐시 사용 ON**
-4. 시작 → 로그에 `[재크롤] watchtower …` + 나머지는 `[구조 캐시] … 재사용` → 새 호수만 몇 초 만에 추가
+1. 상단 **🔄 정기 업데이트** 버튼 클릭 → 정기 갱신 출판물(파수대·깨어라·집회교재·왕국봉사·프로그램·연재기사) 자동 선택 + 🔄 ON + 구조 캐시 ON
+   - (또는 수동으로: 갱신할 카테고리 선택 → 각 카드 🔄 클릭 → 구조 캐시 ON)
+2. 시작 → 로그에 `[재크롤] watchtower …` + 나머지는 `[구조 캐시] … 재사용` → 새 호수만 몇 초 만에 추가
 
 > 참고: 🔄로 새 항목을 추가해도, **이미 작성된 다른 문서들은 그 새 항목으로 링크되지 않습니다**(기존 파일 스킵). 참조하는 문서까지 링크하려면 그 문서를 삭제 후 재임포트하세요.
 
-### CLI로 실행
+### 정기 업데이트 CLI (`update.js`)
+
+브라우저 없이 터미널에서 정기 갱신 출판물을 재크롤·임포트합니다. cron/launchd로 **자동 최신화**에 쓸 수 있습니다.
+
+```bash
+# 기본 프리셋(파수대·깨어라·집회교재·왕국봉사·프로그램·연재기사) 재크롤
+node update.js            # 또는: npm run update
+
+# 지정한 카테고리만
+node update.js watchtower awake
+
+# 구조 캐시 없이 전체 재크롤
+node update.js --no-cache
+```
+
+**cron 예시** (매월 1일 오전 6시 자동 업데이트):
+```cron
+0 6 1 * * cd /path/to/org-to-obsidian && /usr/bin/env node update.js >> update.log 2>&1
+```
+
+### CLI로 실행 (구버전)
 
 ```bash
 node main.js
 ```
 
-영상, 서적, 통찰 3종만 임포트합니다. 전체 카테고리 임포트는 웹 UI를 사용하세요.
+영상, 서적, 통찰 3종만 임포트합니다. 전체 카테고리 임포트는 웹 UI를, 정기 업데이트는 `update.js`를 사용하세요.
 
 ### 처음부터 다시 임포트하기
 
@@ -184,7 +203,9 @@ flowchart TD
 
 ```
 ├── server.js          # HTTP 서버 (웹 UI + SSE 로그 + 임포트 API)
-├── main.js            # CLI 진입점 (영상/서적/통찰)
+├── import-runner.js   # 임포트 오케스트레이션 (server/CLI 공용)
+├── update.js          # 정기 업데이트 CLI (cron 스케줄링용)
+├── main.js            # CLI 진입점 (영상/서적/통찰, 구버전)
 ├── index.html         # 웹 UI (카테고리 선택 + 실시간 로그)
 ├── constant.js        # Vault 경로 상수
 ├── requests.js        # jw.org/WOL API 요청 (axios)
@@ -214,6 +235,23 @@ flowchart TD
 ```
 
 ## 변경 이력
+
+<details>
+<summary><strong>v1.7</strong> — 정기 업데이트 프리셋 + 헤드리스 CLI</summary>
+
+### 정기 업데이트 프리셋 버튼
+
+웹 UI에 **🔄 정기 업데이트** 버튼 추가 — 지속 갱신 출판물(파수대·깨어라·집회교재·왕국봉사·프로그램·연재기사)을 한 번에 선택 + 재크롤 ON + 구조 캐시 ON. 클릭 두 번으로 최신화.
+
+### 헤드리스 CLI (`update.js`)
+
+브라우저 없이 정기 업데이트를 실행하는 CLI. cron/launchd로 자동 최신화 가능.
+
+- 임포트 오케스트레이션(Phase 1·2)을 `import-runner.js`의 `runImport(options, log)`로 추출해 **server.js와 CLI가 공유** (로직 중복 제거).
+- `node update.js` 기본 프리셋 / `node update.js watchtower awake` 지정 / `--no-cache` 전체 재크롤.
+- `npm run update`, `npm start` 스크립트 추가.
+
+</details>
 
 <details>
 <summary><strong>v1.6</strong> — 카테고리별 재크롤(🔄) + 로그 최신순 + 상호참조 보강</summary>

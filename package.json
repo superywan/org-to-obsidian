@@ -4,6 +4,8 @@
   "description": "import script from jw.org certain category of video to notion page",
   "main": "main.js",
   "scripts": {
+    "start": "node server.js",
+    "update": "node update.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

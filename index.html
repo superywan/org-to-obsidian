@@ -351,6 +351,7 @@
     <button class="bulk-btn" id="bulkVideo" onclick="toggleBulk('video')">🎬 영상</button>
     <button class="bulk-btn" id="bulkRest" onclick="toggleBulk('rest')">📚 나머지 전체</button>
     <button class="bulk-btn" id="bulkAll" onclick="toggleBulk('all')">✅ 모두 선택</button>
+    <button class="bulk-btn" id="presetUpdate" onclick="presetUpdate()" title="정기 갱신 출판물만 선택 + 재크롤 + 구조 캐시 ON">🔄 정기 업데이트</button>
   </div>
   <label style="display:flex;align-items:center;gap:8px;margin:10px 0;font-size:0.9em;cursor:pointer;">
     <input type="checkbox" id="useStructureCache" />
@@ -433,6 +434,23 @@
       active[k] = anyOff;
       document.getElementById('card-' + k).classList.toggle('active', anyOff);
     });
+    updateUI();
+  }
+
+  // 정기 업데이트 프리셋: 지속 갱신 출판물만 선택 + 재크롤 ON + 구조 캐시 ON
+  function presetUpdate() {
+    const UPDATING = ['watchtower', 'awake', 'meeting', 'kingdomService', 'programs', 'webSeries'];
+    categories.forEach(k => {
+      active[k] = false;
+      document.getElementById('card-' + k).classList.remove('active');
+      if (refresh[k]) toggleRefresh(k); // 재크롤 OFF로 초기화
+    });
+    UPDATING.forEach(k => {
+      active[k] = true;
+      document.getElementById('card-' + k).classList.add('active');
+      if (!refresh[k]) toggleRefresh(k); // 재크롤 ON
+    });
+    document.getElementById('useStructureCache').checked = true;
     updateUI();
   }
 

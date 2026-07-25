@@ -122,6 +122,26 @@ const parseChapterLinks = (html) => {
   return chapters;
 };
 
+// 다중 부(部) 책의 하위 파트 TOC 링크 추출 (예: /publication/.../lff/21)
+// 행누처럼 각 부가 메인 TOC에 d링크로 노출되지 않고 하위 페이지로 분리된 경우,
+// 이 링크들을 따라가야 2부·3부 이후 과(課)까지 매핑할 수 있다.
+const parsePartLinks = (html, abbrev) => {
+  const $ = cheerio.load(html);
+  const urls = [];
+  const seen = new Set();
+  const esc = abbrev.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`/wol/publication/r8/lp-ko/${esc}/\\d+(?:$|[?#])`);
+  $(`a[href*="/wol/publication/r8/lp-ko/${abbrev}/"]`).each((_, el) => {
+    const href = $(el).attr("href") || "";
+    if (!re.test(href)) return;
+    const full = href.startsWith("http") ? href : `${WOL_BASE_URL}${href}`;
+    if (seen.has(full)) return;
+    seen.add(full);
+    urls.push(full);
+  });
+  return urls;
+};
+
 const extractPageTitle = (html) => {
   const $ = cheerio.load(html);
   return normalizeText($("h1").first().text()) || "Unknown";
@@ -209,6 +229,28 @@ export const buildBookMappings = async (docidMap, pubSelection = null) => {
         continue;
       }
       chapters = parseChapterLinks(tocHtml);
+
+      // 다중 부(部) 구조: 하위 파트 TOC가 있으면 각 파트 챕터도 병합
+      // (메인 TOC엔 1부만 노출되는 행누 같은 책 대응). docId 기준 중복 제거.
+      const partUrls = parsePartLinks(tocHtml, pub.abbrev);
+      if (partUrls.length > 0) {
+        const seenDoc = new Set(chapters.map((c) => c.docId));
+        for (const partUrl of partUrls) {
+          try {
+            const partHtml = await getLvPageAPI(partUrl);
+            await delay(200);
+            for (const ch of parseChapterLinks(partHtml)) {
+              if (!seenDoc.has(ch.docId)) {
+                seenDoc.add(ch.docId);
+                chapters.push(ch);
+              }
+            }
+          } catch (e) {
+            console.error(`  Failed to fetch part TOC ${partUrl}: ${e.message}`);
+          }
+        }
+        console.log(`  ${pub.abbrev}: ${partUrls.length}개 파트 병합 → 총 ${chapters.length}개 챕터`);
+      }
     }
 
     if (chapters.length === 0) continue;

@@ -156,6 +156,24 @@ npm run update     # = node update.js  (브라우저 없이, cron 자동화 가�
 
 기본 대상은 **영상·파수대·집회 교재**입니다. (대상 변경은 아래 **더 알아보기 › 정기 업데이트 대상 바꾸기** 참고)
 
+<details>
+<summary><strong>cron으로 매월 자동 실행하기</strong></summary>
+
+<br>
+
+터미널에서 `crontab -e` 를 열고 아래 한 줄을 추가합니다 (매월 1일 오전 6시 예시):
+
+```cron
+0 6 1 * * cd /프로젝트/경로 && /node/절대경로 update.js >> update.log 2>&1
+```
+
+- `/프로젝트/경로` — 이 프로젝트 폴더 (`pwd`로 확인)
+- `/node/절대경로` — `which node` 결과. **nvm은 cron PATH에 없어 절대경로 필수** (예: `/Users/waneddyyi/.nvm/versions/node/v16.20.2/bin/node`)
+- 시간 형식은 `분 시 일 월 요일` (예: 매주 월요일 6시 = `0 6 * * 1`)
+- 로그는 `update.log`에 쌓입니다.
+
+</details>
+
 #### 3. 내 노트에 성구 태그 달기
 
 직접 쓴 md 파일의 성경 구절에 태그·링크를 붙입니다:
@@ -222,12 +240,6 @@ guidelines, glossary, index
 ```
 
 > `books`는 개별 책이 아니라 **서적 카테고리 전체**입니다. 넣으면 전 서적 구조를 재크롤하지만(새 책 자동 발견), 기존 파일은 스킵하므로 새 것만 다운로드됩니다.
-
-**cron 자동화 예시** (매월 1일 오전 6시):
-
-```cron
-0 6 1 * * cd /path/to/org-to-obsidian && /usr/bin/env node update.js >> update.log 2>&1
-```
 
 </details>
 
